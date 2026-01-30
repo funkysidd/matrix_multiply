@@ -1,28 +1,12 @@
+#include "Macros.h"
+
 #include <cuda_runtime_api.h>
 #include <cuda/cmath>
 
 #include <cstdio>
 #include <chrono>
 
-#define CUDA_CHECK(expr_to_check) do {                 \
-    cudaError_t result  = expr_to_check;               \
-    if(result != cudaSuccess)                          \
-    {                                                  \
-        fprintf(stderr,                                \
-                "CUDA Runtime Error: %s:%i:%d = %s\n", \
-                __FILE__,                              \
-                __LINE__,                              \
-                result,                                \
-                cudaGetErrorString(result));           \
-    }                                                  \
-} while(0)
-
-struct Matrix
-{
-    float* data;
-    dim3 dims;
-    dim3 blocks;
-};
+#define BLOCKSIZE 32
 
 __global__ void matMul(
     float* matA,
@@ -37,16 +21,16 @@ __global__ void matMul(
     dim3 dimsC
 )
 {
-    __shared__ float blockA[32][32];
-    __shared__ float blockB[32][33];
-    __shared__ float blockC[32][32];
+    __shared__ float blockA[BLOCKSIZE][BLOCKSIZE];
+    __shared__ float blockB[BLOCKSIZE][BLOCKSIZE+1];
+    __shared__ float blockC[BLOCKSIZE][BLOCKSIZE];
 
     dim3 mappedBlockA = { blockIdx.y % blocksA.x, blockIdx.y / blocksA.x };
     dim3 mappedBlockB = { blockIdx.x, mappedBlockA.x };
     
-    dim3 blockOffsetA = { mappedBlockA.x * 32, mappedBlockA.y * 32 };
+    dim3 blockOffsetA = { mappedBlockA.x * BLOCKSIZE, mappedBlockA.y * BLOCKSIZE };
     dim3 threadOffsetA = { blockOffsetA.x + threadIdx.x, blockOffsetA.y + threadIdx.y };
-    dim3 blockOffsetB = { mappedBlockB.x * 32, mappedBlockB.y * 32 };
+    dim3 blockOffsetB = { mappedBlockB.x * BLOCKSIZE, mappedBlockB.y * BLOCKSIZE };
     dim3 threadOffsetB = { blockOffsetB.x + threadIdx.x, blockOffsetB.y + threadIdx.y };
 
     blockA[threadIdx.y][threadIdx.x] = matA[threadOffsetA.y * dimsA.x + threadOffsetA.x];
@@ -55,69 +39,17 @@ __global__ void matMul(
     __syncthreads();
 
     blockC[threadIdx.y][threadIdx.x] = 0;
-    for (int idx = 0; idx < 32; ++idx)
+    for (int idx = 0; idx < BLOCKSIZE; ++idx)
     {
         blockC[threadIdx.y][threadIdx.x] += blockA[threadIdx.y][idx] * blockB[idx][threadIdx.x];
     }
 
     dim3 mappedBlockC = { blockIdx.x, blockIdx.y / blocksB.y };
-    dim3 blockOffsetC = { mappedBlockC.x * 32, mappedBlockC.y * 32 };
+    dim3 blockOffsetC = { mappedBlockC.x * BLOCKSIZE, mappedBlockC.y * BLOCKSIZE };
     dim3 threadOffsetC = { blockOffsetC.x + threadIdx.x, blockOffsetC.y + threadIdx.y, 0 };
 
     atomicAdd(&matC[threadOffsetC.y * dimsC.x + threadOffsetC.x], blockC[threadIdx.y][threadIdx.x]);
 }
-
-void computeMappings(
-    const Matrix* a,
-    const Matrix* b,
-    int *aMapping,
-    int *bMapping
-)
-{
-    int cIdx = 0;
-    for (int row = 0; row < a->blocks.y; ++row)
-    {
-        for (int col = 0; col < a->blocks.x; ++col)
-        {
-            int aIdx = row * a->blocks.x + col;
-
-            // The incoming `col` becomes the row that we look at in in matrix `b`.
-            int bBase= col * b->blocks.x;
-            for (int i = 0; i < b->blocks.x; ++i)
-            {
-                int bIdx = bBase + i;
-                aMapping[cIdx] = aIdx;
-                bMapping[cIdx] = bIdx;
-                cIdx++;
-            }
-        }
-    }
-}
-
-#define MATRIX_DIMS(numBlocks, blockDims) { numBlocks.x * blockDims.x, numBlocks.y * blockDims.y }
-
-#define GET_SIZE(dims) (dims.x * dims.y)
-
-#define ASSIGN_MATRIX(data, dims, val) do {    \
-    for (int row = 0; row < dims.y; ++row)     \
-    {                                          \
-        for (int col = 0; col < dims.x; ++col) \
-        {                                      \
-            data[row * dims.x + col] = val;    \
-        }                                      \
-    }                                          \
-} while (0)
-
-#define VERIFY_RESULT(data, dims, expVal, maxError)  do {                           \
-    for (int row = 0; row < dims.y; ++row)                                          \
-    {                                                                               \
-        for (int col = 0; col < dims.x; ++col)                                      \
-        {                                                                           \
-            float curVal = data[row * dims.x + col];                                \
-            maxError = cuda::std::fmax(maxError, cuda::std::fabs(curVal - expVal)); \
-        }                                                                           \
-    }                                                                               \
-} while (0)
 
 int main()
 {
@@ -138,7 +70,7 @@ int main()
     assert(dimsMatA.x == dimsMatB.y);
 
     // Compute number of 32x32 blocks in each of the matrices
-    constexpr dim3 blockDims{ 32, 32 };
+    constexpr dim3 blockDims{ BLOCKSIZE, BLOCKSIZE };
     constexpr dim3 blocksMatA{ cuda::ceil_div(dimsMatA.x, blockDims.x), cuda::ceil_div(dimsMatA.y, blockDims.y) };
     constexpr dim3 blocksMatB{ cuda::ceil_div(dimsMatB.x, blockDims.x), cuda::ceil_div(dimsMatB.y, blockDims.y) };
 
