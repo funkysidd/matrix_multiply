@@ -189,9 +189,13 @@ int main()
     float elapsedTime = 0.0f;
     CUDA_CHECK(cudaEventElapsedTime(&elapsedTime, startEvent, endEvent));
     fprintf(stdout, "Duration: %0.4f (milliseconds)\n", elapsedTime);
+
+    constexpr float totalOps = 2.0f * dimsMatCMod.x * dimsMatCMod.y * dimsMatAMod.x;
+    float flops = totalOps / (elapsedTime / 1000.f);
+    fprintf(stdout, "Performance (GFLOPS): %0.4f\n", flops / 1.e9); // A giga flop is 10^9 flops
     
     CUDA_CHECK(cudaDeviceSynchronize());
-    
+
     CUDA_CHECK(cudaEventDestroy(endEvent));
     CUDA_CHECK(cudaEventDestroy(startEvent));
 
