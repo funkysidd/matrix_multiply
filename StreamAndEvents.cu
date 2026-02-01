@@ -1,3 +1,5 @@
+#include "Macros.h"
+
 #include <cuda_runtime_api.h>
 #include <cuda/cmath>
 
@@ -10,19 +12,6 @@
 // Enabling this causes the application to use `cudaEventSynchronize()`, which causes the main thread to block instead
 // of busy wait. Using this path requires that the event be created with `cudaEventCreateWithFlags()`.
 #define EVENT_SYNCHRONIZE 0
-
-#define CUDA_CHECK(expr_to_check) do {            \
-    cudaError_t result  = expr_to_check;          \
-    if(result != cudaSuccess)                     \
-    {                                             \
-        fprintf(stderr,                           \
-                "CUDA Runtime Error: %s:%i:%d = %s\n", \
-                __FILE__,                         \
-                __LINE__,                         \
-                result,\
-                cudaGetErrorString(result));      \
-    }                                             \
-} while(0)
 
 // Kernel function to add the elements of two arrays
 __global__ void add(float* x, float* y)
@@ -63,7 +52,7 @@ int main()
     if (cudaDeviceCount < 1)
     {
         std::cout << "No CUDA device found, exiting!" << std::endl;
-        return 0;
+        return 1;
     }
 
     CUDA_CHECK(cudaSetDevice(0));
