@@ -23,32 +23,27 @@ __global__ void matMul(
 {
     __shared__ float blockA[BLOCKSIZE][BLOCKSIZE];
     __shared__ float blockB[BLOCKSIZE][BLOCKSIZE+1];
-    __shared__ float blockC[BLOCKSIZE][BLOCKSIZE];
 
     dim3 mappedBlockA = { blockIdx.y % blocksA.x, blockIdx.y / blocksA.x };
     dim3 mappedBlockB = { blockIdx.x, mappedBlockA.x };
+    dim3 mappedBlockC = { blockIdx.x, blockIdx.y / blocksB.y };
     
-    dim3 blockOffsetA = { mappedBlockA.x * BLOCKSIZE, mappedBlockA.y * BLOCKSIZE };
-    dim3 threadOffsetA = { blockOffsetA.x + threadIdx.x, blockOffsetA.y + threadIdx.y };
-    dim3 blockOffsetB = { mappedBlockB.x * BLOCKSIZE, mappedBlockB.y * BLOCKSIZE };
-    dim3 threadOffsetB = { blockOffsetB.x + threadIdx.x, blockOffsetB.y + threadIdx.y };
+    dim3 threadOffsetA = { mappedBlockA.x * BLOCKSIZE + threadIdx.x, mappedBlockA.y * BLOCKSIZE + threadIdx.y };
+    dim3 threadOffsetB = { mappedBlockB.x * BLOCKSIZE + threadIdx.x, mappedBlockB.y * BLOCKSIZE + threadIdx.y };
+    dim3 threadOffsetC = { mappedBlockC.x * BLOCKSIZE + threadIdx.x, mappedBlockC.y * BLOCKSIZE + threadIdx.y };
 
     blockA[threadIdx.y][threadIdx.x] = matA[threadOffsetA.y * dimsA.x + threadOffsetA.x];
     blockB[threadIdx.y][threadIdx.x] = matB[threadOffsetB.y * dimsB.x + threadOffsetB.x];
 
     __syncthreads();
 
-    blockC[threadIdx.y][threadIdx.x] = 0;
+    float result = 0.0f;
     for (int idx = 0; idx < BLOCKSIZE; ++idx)
     {
-        blockC[threadIdx.y][threadIdx.x] += blockA[threadIdx.y][idx] * blockB[idx][threadIdx.x];
+        result += blockA[threadIdx.y][idx] * blockB[idx][threadIdx.x];
     }
 
-    dim3 mappedBlockC = { blockIdx.x, blockIdx.y / blocksB.y };
-    dim3 blockOffsetC = { mappedBlockC.x * BLOCKSIZE, mappedBlockC.y * BLOCKSIZE };
-    dim3 threadOffsetC = { blockOffsetC.x + threadIdx.x, blockOffsetC.y + threadIdx.y, 0 };
-
-    atomicAdd(&matC[threadOffsetC.y * dimsC.x + threadOffsetC.x], blockC[threadIdx.y][threadIdx.x]);
+    atomicAdd(&matC[threadOffsetC.y * dimsC.x + threadOffsetC.x], result);
 }
 
 int main()
