@@ -54,7 +54,7 @@ int main()
     if (cudaDeviceCount < 1)
     {
         fprintf(stderr, "No CUDA device found, exiting!\n");
-        return 0;
+        return 1;
     }
 
     CUDA_CHECK(cudaSetDevice(0));
