@@ -49,10 +49,10 @@ __global__ void clusterHist_kernel(int *bins,
             binId = nbins - 1;
         }
           
-        // NOTE: The total number of bins are now distributed across the cluster. So every `binId` should be found across
-        // the thread blocks in the cluster.
+        // NOTE: The total number of bins are now distributed across the cluster. So every `binId` should be found
+        // across the thread blocks in the cluster.
 
-        // Find destination block rank and offset for computing distributed shared memory histogram
+        // Find destination block rank and offset for computing distributed shared memory histogram.
         int dstBlockRank = (int)(binId / binsPerBlock);
         int dstOffset = binId % binsPerBlock;
 
@@ -63,8 +63,8 @@ __global__ void clusterHist_kernel(int *bins,
         atomicAdd(dstSmem + dstOffset, 1);
     }
 
-    // Cluster synchronization is required to ensure all distributed shared memory operations are completed and no thread
-    // block exits while other thread blocks are still accessing distributed shared memory
+    // Cluster synchronization is required to ensure all distributed shared memory operations are completed and no
+    // thread block exits while other thread blocks are still accessing distributed shared memory.
     cluster.sync();
 
     // Perform global memory histogram, using the local distributed memory histogram NOTE: This essentially copies local
@@ -93,9 +93,9 @@ int main()
     constexpr int arraySize = 1 << 12;
     constexpr int numBins = arraySize; // Every array element is in its own bin
     
-    // Cluster_size depends on the histogram size. `clusterSize == 1` implies no distributed shared memory, just
+    // Cluster size depends on the histogram size. `clusterSize == 1` implies no distributed shared memory, just
     // thread block local shared memory
-    constexpr int clusterSize = 2; // size 2 is an example here
+    constexpr int clusterSize = 2;
     constexpr int binsPerBlock = numBins / clusterSize;
 
     int* bins = nullptr;
@@ -115,11 +115,13 @@ int main()
         cudaLaunchConfig_t config = {0};
         config.gridDim = arraySize / threadsPerBlock;
         config.blockDim = threadsPerBlock;
-        // Dynamic shared memory size is per block. Distributed shared memory size =  clusterSize * binsPerBlock *
-        // sizeof(int).
-        config.dynamicSmemBytes = binsPerBlock * sizeof(int);
+        config.dynamicSmemBytes = binsPerBlock * sizeof(int); // Dynamic shared memory size is per block. Distributed
+                                                              // shared memory size =  clusterSize * binsPerBlock *
+                                                              // sizeof(int).
 
-        CUDA_CHECK(cudaFuncSetAttribute((void *)clusterHist_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, config.dynamicSmemBytes));
+        CUDA_CHECK(cudaFuncSetAttribute((void *)clusterHist_kernel,
+                                        cudaFuncAttributeMaxDynamicSharedMemorySize,
+                                        config.dynamicSmemBytes));
 
         cudaLaunchAttribute attribute[1];
         attribute[0].id = cudaLaunchAttributeClusterDimension;
