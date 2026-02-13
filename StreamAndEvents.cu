@@ -1,7 +1,7 @@
 #include "Macros.h"
 
-#include <cuda_runtime_api.h>
 #include <cuda/cmath>
+#include <cuda_runtime_api.h>
 
 #include <nvtx3/nvtx3.hpp>
 
@@ -14,19 +14,19 @@
 #define EVENT_SYNCHRONIZE 0
 
 // Kernel function to add the elements of two arrays
-__global__ void add(float* x, float* y)
+__global__ void add(float *x, float *y)
 {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     y[idx] = x[idx] + y[idx];
 }
 
-__global__ void scale(float* y, float scale)
+__global__ void scale(float *y, float scale)
 {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     y[idx] *= scale;
 }
 
-void copyDataWhenReady(float* t_host, float* y_device, int numElements, cudaEvent_t event, cudaStream_t stream)
+void copyDataWhenReady(float *t_host, float *y_device, int numElements, cudaEvent_t event, cudaStream_t stream)
 {
 #if !EVENT_SYNCHRONIZE
     while (true)
@@ -34,7 +34,8 @@ void copyDataWhenReady(float* t_host, float* y_device, int numElements, cudaEven
         if (cudaEventQuery(event) == cudaSuccess)
         {
             // nvtx3::scoped_range r{std::string("MaxError")};
-            cudaMemcpyAsync(t_host, y_device, numElements * sizeof(float), cudaMemcpyKind::cudaMemcpyDeviceToHost, stream);
+            cudaMemcpyAsync(t_host, y_device, numElements * sizeof(float), cudaMemcpyKind::cudaMemcpyDeviceToHost,
+                            stream);
             break;
         }
     }
@@ -61,9 +62,9 @@ int main()
     constexpr int blockSize = 32 * 32;
     constexpr int gridSize = cuda::ceil_div(numElements, blockSize);
 
-    float* x_device = nullptr;
-    float* y_device = nullptr;
-    float* t_host = nullptr;
+    float *x_device = nullptr;
+    float *y_device = nullptr;
+    float *t_host = nullptr;
 
     CUDA_CHECK(cudaMalloc(&x_device, numElements * sizeof(float)));
     CUDA_CHECK(cudaMalloc(&y_device, numElements * sizeof(float)));
@@ -113,10 +114,8 @@ int main()
 
     // Check for errors (all values should be 3.0f)
     float maxError = -1.0f;
-    std::for_each(t_host, t_host + numElements, [&](const float& val) {
-        maxError = cuda::std::fmax(maxError, cuda::std::fabs(val - 3.0f));
-        }
-    );
+    std::for_each(t_host, t_host + numElements,
+                  [&](const float &val) { maxError = cuda::std::fmax(maxError, cuda::std::fabs(val - 3.0f)); });
 
     std::cout << "Max error: " << maxError << std::endl;
 
