@@ -2,7 +2,7 @@
 
 A collection of CUDA C++ examples and utilities for testing GPU programming patterns and optimizations.
 
-All matrix multiplication work is inspired from Siboehm's work[1].
+All matrix multiplication work is inspired from Siboehm's [work][1].
 
 ## Format Script
 
@@ -23,4 +23,4 @@ The script will format all CUDA source files in-place and report success or any 
 
 # References
 
-[1]: https://siboehm.com/articles/22/CUDA-MMM
+* [1]: https://siboehm.com/articles/22/CUDA-MMM
