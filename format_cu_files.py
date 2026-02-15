@@ -21,7 +21,7 @@ def format_cu_files():
         try:
             print(f"Formatting {cu_file}...", end=" ")
             subprocess.run(
-                ["clang-format", "-i", cu_file],
+                ["clang-format-20", "-i", cu_file],
                 check=True,
                 capture_output=True
             )
@@ -30,7 +30,7 @@ def format_cu_files():
             print("✗")
             failed.append((cu_file, str(e)))
         except FileNotFoundError:
-            print("\n✗ clang-format not found. Please install clang-format and try again.")
+            print("\n✗ clang-format-20 not found. Please install clang-format and try again.")
             sys.exit(1)
     
     if failed:

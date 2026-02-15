@@ -109,7 +109,7 @@ int main()
 
     // Launch via extensible launch
     {
-        cudaLaunchConfig_t config = {0};
+        cudaLaunchConfig_t config = { 0 };
         config.gridDim = arraySize / threadsPerBlock;
         config.blockDim = threadsPerBlock;
         config.dynamicSmemBytes = binsPerBlock * sizeof(int); // Dynamic shared memory size is per block. Distributed

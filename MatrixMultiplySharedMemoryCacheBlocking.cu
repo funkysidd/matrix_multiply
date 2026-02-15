@@ -18,13 +18,13 @@ __global__ void matMul(float *matA, dim3 dimsA, dim3 blocksA,
     __shared__ float blockA[BLOCKSIZE][BLOCKSIZE];
     __shared__ float blockB[BLOCKSIZE][BLOCKSIZE + 1];
 
-    dim3 mappedBlockA = {blockIdx.y % blocksA.x, blockIdx.y / blocksA.x};
-    dim3 mappedBlockB = {blockIdx.x, mappedBlockA.x};
-    dim3 mappedBlockC = {blockIdx.x, blockIdx.y / blocksB.y};
+    dim3 mappedBlockA = { blockIdx.y % blocksA.x, blockIdx.y / blocksA.x };
+    dim3 mappedBlockB = { blockIdx.x, mappedBlockA.x };
+    dim3 mappedBlockC = { blockIdx.x, blockIdx.y / blocksB.y };
 
-    dim3 threadOffsetA = {mappedBlockA.x * BLOCKSIZE + threadIdx.x, mappedBlockA.y * BLOCKSIZE + threadIdx.y};
-    dim3 threadOffsetB = {mappedBlockB.x * BLOCKSIZE + threadIdx.x, mappedBlockB.y * BLOCKSIZE + threadIdx.y};
-    dim3 threadOffsetC = {mappedBlockC.x * BLOCKSIZE + threadIdx.x, mappedBlockC.y * BLOCKSIZE + threadIdx.y};
+    dim3 threadOffsetA = { mappedBlockA.x * BLOCKSIZE + threadIdx.x, mappedBlockA.y * BLOCKSIZE + threadIdx.y };
+    dim3 threadOffsetB = { mappedBlockB.x * BLOCKSIZE + threadIdx.x, mappedBlockB.y * BLOCKSIZE + threadIdx.y };
+    dim3 threadOffsetC = { mappedBlockC.x * BLOCKSIZE + threadIdx.x, mappedBlockC.y * BLOCKSIZE + threadIdx.y };
 
     blockA[threadIdx.y][threadIdx.x] = matA[threadOffsetA.y * dimsA.x + threadOffsetA.x];
     blockB[threadIdx.y][threadIdx.x] = matB[threadOffsetB.y * dimsB.x + threadOffsetB.x];
@@ -53,19 +53,19 @@ int main()
 
     CUDA_CHECK(cudaSetDevice(0));
 
-    constexpr dim3 dimsMatA{4096, 4096}; // x (cols), y (rows)
-    constexpr dim3 dimsMatB{4096, 4096}; // x (cols), y (rows)
+    constexpr dim3 dimsMatA{ 4096, 4096 }; // x (cols), y (rows)
+    constexpr dim3 dimsMatB{ 4096, 4096 }; // x (cols), y (rows)
 
     assert(dimsMatA.x == dimsMatB.y);
 
     // Compute number of 32x32 blocks in each of the matrices
-    constexpr dim3 blockDims{BLOCKSIZE, BLOCKSIZE};
-    constexpr dim3 blocksMatA{cuda::ceil_div(dimsMatA.x, blockDims.x), cuda::ceil_div(dimsMatA.y, blockDims.y)};
-    constexpr dim3 blocksMatB{cuda::ceil_div(dimsMatB.x, blockDims.x), cuda::ceil_div(dimsMatB.y, blockDims.y)};
+    constexpr dim3 blockDims{ BLOCKSIZE, BLOCKSIZE };
+    constexpr dim3 blocksMatA{ cuda::ceil_div(dimsMatA.x, blockDims.x), cuda::ceil_div(dimsMatA.y, blockDims.y) };
+    constexpr dim3 blocksMatB{ cuda::ceil_div(dimsMatB.x, blockDims.x), cuda::ceil_div(dimsMatB.y, blockDims.y) };
 
     assert(blocksMatA.x == blocksMatB.y);
 
-    constexpr dim3 blocksMatC{blocksMatB.x, blocksMatA.y};
+    constexpr dim3 blocksMatC{ blocksMatB.x, blocksMatA.y };
 
     constexpr dim3 dimsMatAMod = MATRIX_DIMS(blocksMatA, blockDims);
     constexpr dim3 dimsMatBMod = MATRIX_DIMS(blocksMatB, blockDims);
@@ -96,7 +96,7 @@ int main()
                           cudaMemcpyKind::cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemset(matCDevice, 0, GET_SIZE(dimsMatCMod) * sizeof(float)));
 
-    constexpr dim3 gridDims{blocksMatC.x, blocksMatC.y * blocksMatB.y};
+    constexpr dim3 gridDims{ blocksMatC.x, blocksMatC.y * blocksMatB.y };
 
     cudaEvent_t startEvent;
     cudaEvent_t endEvent;

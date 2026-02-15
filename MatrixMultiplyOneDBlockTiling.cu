@@ -41,19 +41,19 @@ __global__ void matMul(float *matA, dim3 dimsA, dim3 blocksA,
     __shared__ float sharedBlockA[BM][BK];
     __shared__ float sharedBlockB[BK][BN];
 
-    float threadData[TM] = {0.0f};
+    float threadData[TM] = { 0.0f };
 
-    dim2 blockCellOffsetMatA = {0, blockIdx.y * BM};
-    dim2 blockCellOffsetMatB = {blockIdx.x * BN, 0};
-    dim2 blockCellOffsetMatC = {blockIdx.x * BN, blockIdx.y * BM};
+    dim2 blockCellOffsetMatA = { 0, blockIdx.y * BM };
+    dim2 blockCellOffsetMatB = { blockIdx.x * BN, 0 };
+    dim2 blockCellOffsetMatC = { blockIdx.x * BN, blockIdx.y * BM };
 
-    dim2 cellIdxBlockA = {threadIdx.x % BK, threadIdx.x / BK}; // local index within a block in A
-    dim2 cellIdxBlockB = {threadIdx.x % BN, threadIdx.x / BN}; // local index within a block in B
+    dim2 cellIdxBlockA = { threadIdx.x % BK, threadIdx.x / BK }; // local index within a block in A
+    dim2 cellIdxBlockB = { threadIdx.x % BN, threadIdx.x / BN }; // local index within a block in B
 
     for (int blockIt = 0; blockIt < K; blockIt += BK)
     {
-        dim2 cellIdxMatA = {blockCellOffsetMatA.x + cellIdxBlockA.x, blockCellOffsetMatA.y + cellIdxBlockA.y};
-        dim2 cellIdxMatB = {blockCellOffsetMatB.x + cellIdxBlockB.x, blockCellOffsetMatB.y + cellIdxBlockB.y};
+        dim2 cellIdxMatA = { blockCellOffsetMatA.x + cellIdxBlockA.x, blockCellOffsetMatA.y + cellIdxBlockA.y };
+        dim2 cellIdxMatB = { blockCellOffsetMatB.x + cellIdxBlockB.x, blockCellOffsetMatB.y + cellIdxBlockB.y };
 
         sharedBlockA[cellIdxBlockA.y][cellIdxBlockA.x] = matA[cellIdxMatA.y * K + cellIdxMatA.x];
         sharedBlockB[cellIdxBlockB.y][cellIdxBlockB.x] = matB[cellIdxMatB.y * N + cellIdxMatB.x];
@@ -90,8 +90,8 @@ __global__ void matMul(float *matA, dim3 dimsA, dim3 blocksA,
 
     for (int idx = 0; idx < BK; ++idx)
     {
-        dim2 cellIdxBlockC = {cellIdxBlockB.x, cellIdxBlockB.y * BK + idx};
-        dim2 cellIdxMatC = {blockCellOffsetMatC.y + cellIdxBlockC.y, blockCellOffsetMatC.x + cellIdxBlockC.x};
+        dim2 cellIdxBlockC = { cellIdxBlockB.x, cellIdxBlockB.y * BK + idx };
+        dim2 cellIdxMatC = { blockCellOffsetMatC.y + cellIdxBlockC.y, blockCellOffsetMatC.x + cellIdxBlockC.x };
         matC[cellIdxMatC.y * N + cellIdxMatC.x] = threadData[idx];
     }
 }
@@ -109,19 +109,19 @@ int main()
 
     CUDA_CHECK(cudaSetDevice(0));
 
-    constexpr dim3 dimsMatA{K, M}; // x (cols), y (rows)
-    constexpr dim3 dimsMatB{N, K}; // x (cols), y (rows)
+    constexpr dim3 dimsMatA{ K, M }; // x (cols), y (rows)
+    constexpr dim3 dimsMatB{ N, K }; // x (cols), y (rows)
 
     assert(dimsMatA.x == dimsMatB.y);
 
-    constexpr dim3 blockDims{BN, BM};
-    constexpr dim3 threadDims{(blockDims.x * blockDims.y) / TM};
-    constexpr dim3 blocksMatA{cuda::ceil_div(dimsMatA.x, blockDims.x), cuda::ceil_div(dimsMatA.y, blockDims.y)};
-    constexpr dim3 blocksMatB{cuda::ceil_div(dimsMatB.x, blockDims.x), cuda::ceil_div(dimsMatB.y, blockDims.y)};
+    constexpr dim3 blockDims{ BN, BM };
+    constexpr dim3 threadDims{ (blockDims.x * blockDims.y) / TM };
+    constexpr dim3 blocksMatA{ cuda::ceil_div(dimsMatA.x, blockDims.x), cuda::ceil_div(dimsMatA.y, blockDims.y) };
+    constexpr dim3 blocksMatB{ cuda::ceil_div(dimsMatB.x, blockDims.x), cuda::ceil_div(dimsMatB.y, blockDims.y) };
 
     assert(blocksMatA.x == blocksMatB.y);
 
-    constexpr dim3 blocksMatC{blocksMatB.x, blocksMatA.y};
+    constexpr dim3 blocksMatC{ blocksMatB.x, blocksMatA.y };
 
     constexpr dim3 dimsMatAMod = MATRIX_DIMS(blocksMatA, blockDims);
     constexpr dim3 dimsMatBMod = MATRIX_DIMS(blocksMatB, blockDims);
@@ -152,7 +152,7 @@ int main()
                           cudaMemcpyKind::cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemset(matCDevice, 0, GET_SIZE(dimsMatCMod) * sizeof(float)));
 
-    constexpr dim3 gridDims{blocksMatC.x, blocksMatC.y};
+    constexpr dim3 gridDims{ blocksMatC.x, blocksMatC.y };
 
     cudaEvent_t startEvent;
     cudaEvent_t endEvent;
