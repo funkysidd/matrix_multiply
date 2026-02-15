@@ -1,5 +1,5 @@
-#include "Macros.h"
 #include "Helpers.h"
+#include "Macros.h"
 
 #include <cuda/cmath>
 #include <cuda_runtime_api.h>

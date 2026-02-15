@@ -11,6 +11,7 @@ import sys
 def format_cu_files():
     """Find and format all .cu files in the current directory."""
     cu_files = [f for f in os.listdir(".") if f.endswith(".cu")]
+    program_name = "clang-format-20"
     
     if not cu_files:
         print("No .cu files found in the current directory.")
@@ -21,7 +22,7 @@ def format_cu_files():
         try:
             print(f"Formatting {cu_file}...", end=" ")
             subprocess.run(
-                ["clang-format-20", "-i", cu_file],
+                [program_name, "-i", cu_file],
                 check=True,
                 capture_output=True
             )
@@ -30,7 +31,7 @@ def format_cu_files():
             print("✗")
             failed.append((cu_file, str(e)))
         except FileNotFoundError:
-            print("\n✗ clang-format-20 not found. Please install clang-format and try again.")
+            print(f"\n✗ {program_name} not found. Please install and try again.")
             sys.exit(1)
     
     if failed:

@@ -1,5 +1,5 @@
-#include "Macros.h"
 #include "Helpers.h"
+#include "Macros.h"
 
 #include <cuda/cmath>
 #include <cuda_runtime_api.h>
@@ -16,17 +16,21 @@
 // Matrix B : K x N
 
 // Block parameters
-#define BM 64 // rows
-#define BN 64 // cols
-#define BK 8  // common dimension
-#define TM 8  // rows/thread
-#define TN 8  // cols/thread
+#define BM 128 // rows
+#define BN 128 // cols
+#define BK 8   // common dimension
+#define TM 8   // rows/thread
+#define TN 8   // cols/thread
 static constexpr int THREADS_BLOCKS_IN_Y = BM / TM;
 static constexpr int THREADS_BLOCKS_IN_X = BN / TN;
 static constexpr int NUM_THREADS_PER_BLOCK = THREADS_BLOCKS_IN_Y * THREADS_BLOCKS_IN_X;
 
 // Block size in A : BM x BK
 // Block size in B : BK x BN
+
+// Macros enabling optimizations
+#define OPT_SHARED_BLOCK_UPDATE 1
+#define OPT_THREAD_DATA_UPDATE 1
 
 __global__ void matMul(float *matA, dim3 dimsA, dim3 blocksA,
                        ///
@@ -49,8 +53,30 @@ __global__ void matMul(float *matA, dim3 dimsA, dim3 blocksA,
     dim2 blockCellOffsetMatC = { blockIdx.x * BN, blockIdx.y * BM };
     dim2 threadBlockOffset = { (threadIdx.x % THREADS_BLOCKS_IN_X) * TN, (threadIdx.x / THREADS_BLOCKS_IN_X) * TM };
 
+#if OPT_SHARED_BLOCK_UPDATE
+    dim2 baseCellIdxBlockA = { threadIdx.x % BK, threadIdx.x / BK };
+    dim2 baseCellIdxBlockB = { threadIdx.x % BN, threadIdx.x / BN };
+    uint32_t strideBlockA = NUM_THREADS_PER_BLOCK / BK;
+    uint32_t strideBlockB = NUM_THREADS_PER_BLOCK / BN;
+#endif
+
     for (int blockIt = 0; blockIt < K; blockIt += BK)
     {
+#if OPT_SHARED_BLOCK_UPDATE
+        for (uint i = 0; i < BM; i += strideBlockA)
+        {
+            dim2 cellIdxMatA = { blockCellOffsetMatA.x + baseCellIdxBlockA.x,
+                                 blockCellOffsetMatA.y + baseCellIdxBlockA.y + i };
+            sharedBlockA[baseCellIdxBlockA.y + i][baseCellIdxBlockA.x] = matA[cellIdxMatA.y * K + cellIdxMatA.x];
+        }
+
+        for (uint i = 0; i < BK; i += strideBlockB)
+        {
+            dim2 cellIdxMatB = { blockCellOffsetMatB.x + baseCellIdxBlockB.x,
+                                 blockCellOffsetMatB.y + baseCellIdxBlockB.y + i };
+            sharedBlockB[baseCellIdxBlockB.y + i][baseCellIdxBlockB.x] = matB[cellIdxMatB.y * N + cellIdxMatB.x];
+        }
+#else
         for (uint i = threadIdx.x; i < (BM * BK); i += NUM_THREADS_PER_BLOCK)
         {
             dim2 cellIdxBlockA = { i % BK, i / BK }; // local index within a block in A
@@ -64,23 +90,12 @@ __global__ void matMul(float *matA, dim3 dimsA, dim3 blocksA,
             dim2 cellIdxMatB = { blockCellOffsetMatB.x + cellIdxBlockB.x, blockCellOffsetMatB.y + cellIdxBlockB.y };
             sharedBlockB[cellIdxBlockB.y][cellIdxBlockB.x] = matB[cellIdxMatB.y * N + cellIdxMatB.x];
         }
+#endif
 
         __syncthreads();
 
         // Every thread computes the associated threadData
-#if 0
-        for (int row = 0; row < TM; ++row)
-        {
-            for (int col = 0; col < TN; ++col)
-            {
-                for (int i = 0; i < BK; ++i)
-                {
-                    threadData[row][col] +=
-                        sharedBlockA[threadBlockOffset.y + row][i] * sharedBlockB[i][threadBlockOffset.x + col];
-                }
-            }
-        }
-#else
+#if OPT_THREAD_DATA_UPDATE
         for (int i = 0; i < BK; ++i)
         {
             for (int row = 0; row < TM; ++row)
@@ -98,6 +113,18 @@ __global__ void matMul(float *matA, dim3 dimsA, dim3 blocksA,
                 for (int col = 0; col < TN; ++col)
                 {
                     threadData[row][col] += rowA[row] * colB[col];
+                }
+            }
+        }
+#else
+        for (int row = 0; row < TM; ++row)
+        {
+            for (int col = 0; col < TN; ++col)
+            {
+                for (int i = 0; i < BK; ++i)
+                {
+                    threadData[row][col] +=
+                        sharedBlockA[threadBlockOffset.y + row][i] * sharedBlockB[i][threadBlockOffset.x + col];
                 }
             }
         }
