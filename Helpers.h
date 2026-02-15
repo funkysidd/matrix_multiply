@@ -1,5 +1,15 @@
 #pragma once
 
+#include <vector_types.h>
+
+#include <cstdint>
+
+struct dim2
+{
+    uint32_t x;
+    uint32_t y;
+};
+
 struct Matrix
 {
     float* data;

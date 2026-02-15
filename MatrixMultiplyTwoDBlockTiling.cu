@@ -1,4 +1,5 @@
 #include "Macros.h"
+#include "Helpers.h"
 
 #include <cuda/cmath>
 #include <cuda_runtime_api.h>
@@ -26,12 +27,6 @@ static constexpr int NUM_THREADS_PER_BLOCK = THREADS_BLOCKS_IN_Y * THREADS_BLOCK
 
 // Block size in A : BM x BK
 // Block size in B : BK x BN
-
-struct dim2
-{
-    uint x;
-    uint y;
-};
 
 __global__ void matMul(float *matA, dim3 dimsA, dim3 blocksA,
                        ///
