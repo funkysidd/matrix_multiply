@@ -149,4 +149,6 @@ int main()
 
     CUDA_CHECK(cudaFree(bins));
     CUDA_CHECK(cudaFree(input));
+
+    return 0;
 }
