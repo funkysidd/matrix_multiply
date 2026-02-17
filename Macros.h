@@ -1,5 +1,7 @@
 #pragma once
 
+// clang-format off
+
 #define CUDA_CHECK(expr_to_check) do {                 \
     cudaError_t result  = expr_to_check;               \
     if(result != cudaSuccess)                          \
@@ -37,3 +39,5 @@
         }                                                                           \
     }                                                                               \
 } while (0)
+
+// clang-format on

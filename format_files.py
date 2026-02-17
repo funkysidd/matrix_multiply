@@ -1,6 +1,5 @@
-#!/usr/bin/env python3
 """
-Format all CUDA (.cu) files in the current directory using clang-format.
+Formats C++/CUDA files in the current directory using clang-format.
 """
 
 import subprocess
@@ -8,28 +7,28 @@ import os
 import sys
 
 
-def format_cu_files():
-    """Find and format all .cu files in the current directory."""
-    cu_files = [f for f in os.listdir(".") if f.endswith(".cu")]
+def format_files():
+    file_extensions = (".cu", ".h")
+    files_to_format = [f for f in os.listdir(".") if f.endswith(file_extensions)]
     program_name = "clang-format-20"
     
-    if not cu_files:
-        print("No .cu files found in the current directory.")
+    if not files_to_format:
+        print("No files found in the current directory.")
         return
     
     failed = []
-    for cu_file in cu_files:
+    for file_to_format in files_to_format:
         try:
-            print(f"Formatting {cu_file}...", end=" ")
+            print(f"Formatting {file_to_format}...", end=" ")
             subprocess.run(
-                [program_name, "-i", cu_file],
+                [program_name, "-i", file_to_format],
                 check=True,
                 capture_output=True
             )
             print("✓")
         except subprocess.CalledProcessError as e:
             print("✗")
-            failed.append((cu_file, str(e)))
+            failed.append((file_to_format, str(e)))
         except FileNotFoundError:
             print(f"\n✗ {program_name} not found. Please install and try again.")
             sys.exit(1)
@@ -40,8 +39,8 @@ def format_cu_files():
             print(f"  - {file}: {error}")
         sys.exit(1)
     else:
-        print(f"\nSuccessfully formatted {len(cu_files)} file(s).")
+        print(f"\nSuccessfully formatted {len(files_to_format)} file(s).")
 
 
 if __name__ == "__main__":
-    format_cu_files()
+    format_files()
