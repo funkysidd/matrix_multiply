@@ -2,7 +2,7 @@
 
 A collection of CUDA C++ examples for testing GPU programming patterns and optimizations.
 
-All matrix multiplication work is inspired from Siboehm's [work][1].
+All matrix multiplication work is inspired from Siboehm's work[1].
 
 # Build Instructions
 
@@ -14,4 +14,4 @@ make
 
 # References
 
-* [1]: https://siboehm.com/articles/22/CUDA-MMM
+1. [How to Optimize a CUDA Matmul Kernel for cuBLAS-like Performance: a Worklog](https://siboehm.com/articles/22/CUDA-MMM)
