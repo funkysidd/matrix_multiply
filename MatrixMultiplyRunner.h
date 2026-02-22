@@ -14,7 +14,7 @@ class MatrixMultiplyRunner
     MatrixMultiplyRunner() = default;
     virtual ~MatrixMultiplyRunner() = default;
 
-    void Init(uint32_t M, uint32_t N, uint32_t K)
+    void Init(uint32_t M, uint32_t N, uint32_t K, float valA = 1.0f, float valB = 1.0f)
     {
         m_matADims = { K, M };
         m_matBDims = { N, K };
@@ -38,8 +38,8 @@ class MatrixMultiplyRunner
         CUDA_CHECK(cudaMallocHost(&m_matBHost, GET_SIZE(m_matBDimsPadded) * sizeof(float)));
         CUDA_CHECK(cudaMallocHost(&m_matCHost, GET_SIZE(m_matCDimsPadded) * sizeof(float)));
 
-        ASSIGN_MATRIX(m_matAHost, m_matADimsPadded, 1.0f);
-        ASSIGN_MATRIX(m_matBHost, m_matBDimsPadded, 1.0f);
+        ASSIGN_MATRIX(m_matAHost, m_matADimsPadded, valA);
+        ASSIGN_MATRIX(m_matBHost, m_matBDimsPadded, valB);
 
         CUDA_CHECK(cudaMalloc(&m_matADevice, GET_SIZE(m_matADimsPadded) * sizeof(float)));
         CUDA_CHECK(cudaMalloc(&m_matBDevice, GET_SIZE(m_matBDimsPadded) * sizeof(float)));
@@ -55,7 +55,7 @@ class MatrixMultiplyRunner
         CUDA_CHECK(cudaEventCreate(&m_endEvent));
     }
 
-    void Run()
+    void Run(float expectedResult = 4096.0f)
     {
         CUDA_CHECK(cudaEventRecord(m_startEvent, 0));
         LaunchKernel();
@@ -69,21 +69,21 @@ class MatrixMultiplyRunner
         float totalOps = 2.0f * m_matCDimsPadded.x * m_matCDimsPadded.y * m_matADimsPadded.x;
         float flops = totalOps / (elapsedTimeMs / 1000.f);
         fprintf(stdout, "Performance (GFLOPS): %0.4f\n", flops / 1.e9); // A giga flop is 10^9 flops
-    }
 
-    void Destroy()
-    {
         CUDA_CHECK(cudaDeviceSynchronize());
-
-        CUDA_CHECK(cudaEventDestroy(m_endEvent));
-        CUDA_CHECK(cudaEventDestroy(m_startEvent));
 
         CUDA_CHECK(cudaMemcpy(m_matCHost, m_matCDevice, GET_SIZE(m_matCDimsPadded) * sizeof(float),
                               cudaMemcpyKind::cudaMemcpyDeviceToHost));
 
         float maxError = 0.0f;
-        VERIFY_RESULT(m_matCHost, m_matCDimsPadded, 4096.0f, maxError);
+        VERIFY_RESULT(m_matCHost, m_matCDimsPadded, expectedResult, maxError);
         fprintf(stdout, "Max error: %0.4f\n", maxError);
+    }
+
+    void Destroy()
+    {
+        CUDA_CHECK(cudaEventDestroy(m_endEvent));
+        CUDA_CHECK(cudaEventDestroy(m_startEvent));
 
         CUDA_CHECK(cudaFree(m_matCDevice));
         CUDA_CHECK(cudaFree(m_matBDevice));

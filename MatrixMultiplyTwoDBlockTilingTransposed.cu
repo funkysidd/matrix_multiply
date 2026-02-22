@@ -30,7 +30,7 @@ __global__ void matMul(float *matA, dim3 dimsA, dim3 blocksA,
 {
     /// @todo: All references to `M`, `N`, `K` need to be relaced with the actual dims of `matA` and `matB`
 
-    __shared__ float sharedBlockA_T[BK][BM];  // Transposed, i.e., as opposed to BM x BK
+    __shared__ float sharedBlockA_T[BK][BM]; // Transposed, i.e., as opposed to BM x BK
     __shared__ float sharedBlockB[BK][BN];
 
     float threadData[TM][TN] = { 0.0f };
