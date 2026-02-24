@@ -1,4 +1,5 @@
 #include "MatrixMultiplyRunner.h"
+#include "ArgsParser.h"
 
 // Matrix dimensions
 #define M 4096 // rows
@@ -141,9 +142,11 @@ class Runner : public MatrixMultiplyRunner
     }
 };
 
-int main()
+int main(int argc, char *argv[])
 {
     assert(CELLS_PER_COLUMN_LOADED_BY_THREAD == sizeof(float4) / sizeof(float));
+
+    ArgsParser parser(argc, argv);
 
     int cudaDeviceCount = -1;
     CUDA_CHECK(cudaGetDeviceCount(&cudaDeviceCount));
@@ -158,7 +161,10 @@ int main()
 
     Runner runner;
     runner.Init(M, N, K, 1.0f, 2.0f);
-    runner.Run(8192.0f);
+    for (int i = 0; i < parser.GetIterations(); ++i)
+    {
+        runner.Run(8192.0f);
+    }
     runner.Destroy();
 
     return 0;

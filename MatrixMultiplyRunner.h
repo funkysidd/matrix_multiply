@@ -64,20 +64,19 @@ class MatrixMultiplyRunner
 
         float elapsedTimeMs = 0.0f;
         CUDA_CHECK(cudaEventElapsedTime(&elapsedTimeMs, m_startEvent, m_endEvent));
-        fprintf(stdout, "Duration: %0.4f (milliseconds)\n", elapsedTimeMs);
 
         float totalOps = 2.0f * m_matCDimsPadded.x * m_matCDimsPadded.y * m_matADimsPadded.x;
-        float flops = totalOps / (elapsedTimeMs / 1000.f);
-        fprintf(stdout, "Performance (GFLOPS): %0.4f\n", flops / 1.e9); // A giga flop is 10^9 flops
+        float flops = totalOps / (elapsedTimeMs / 1000.f); // A giga flop is 10^9 flops
 
         CUDA_CHECK(cudaDeviceSynchronize());
 
         CUDA_CHECK(cudaMemcpy(m_matCHost, m_matCDevice, GET_SIZE(m_matCDimsPadded) * sizeof(float),
                               cudaMemcpyKind::cudaMemcpyDeviceToHost));
+        CUDA_CHECK(cudaMemset(m_matCDevice, 0, GET_SIZE(m_matCDimsPadded) * sizeof(float)));
 
         float maxError = 0.0f;
         VERIFY_RESULT(m_matCHost, m_matCDimsPadded, expectedResult, maxError);
-        fprintf(stdout, "Max error: %0.4f\n", maxError);
+        fprintf(stdout, "Duration (milliseconds): %0.4f, Peformance (GFLOPS): %0.4f, Max error: %0.4f\n", elapsedTimeMs, flops / 1.e9, maxError);
     }
 
     void Destroy()
