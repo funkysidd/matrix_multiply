@@ -76,7 +76,8 @@ class MatrixMultiplyRunner
 
         float maxError = 0.0f;
         VERIFY_RESULT(m_matCHost, m_matCDimsPadded, expectedResult, maxError);
-        fprintf(stdout, "Duration (milliseconds): %0.4f, Performance (GFLOPS): %0.4f, Max error: %0.4f\n", elapsedTimeMs, flops / 1.e9, maxError);
+        fprintf(stdout, "Duration (milliseconds): %0.4f, Performance (GFLOPS): %0.4f, Max error: %0.4f\n",
+                elapsedTimeMs, flops / 1.e9, maxError);
     }
 
     void Destroy()

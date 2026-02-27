@@ -9,7 +9,9 @@ import sys
 
 def format_files():
     file_extensions = (".cu", ".h")
-    files_to_format = [f for f in os.listdir(".") if f.endswith(file_extensions)]
+    files_to_format = []
+    for src_dir in [".", "misc"]:
+        files_to_format += [(src_dir + "/" + f) for f in os.listdir(src_dir) if f.endswith(file_extensions)]
     program_name = "clang-format-20"
     
     if not files_to_format:

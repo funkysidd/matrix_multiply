@@ -1,5 +1,5 @@
-#include "MatrixMultiplyRunner.h"
 #include "ArgsParser.h"
+#include "MatrixMultiplyRunner.h"
 
 #include <cublas_v2.h>
 
@@ -19,10 +19,7 @@
 class Runner : public MatrixMultiplyRunner
 {
   public:
-    Runner(cublasHandle_t handle)
-    : MatrixMultiplyRunner() 
-    , m_handle(handle)
-    {}
+    Runner(cublasHandle_t handle) : MatrixMultiplyRunner(), m_handle(handle) {}
 
   protected:
     void InitThreadBlockDimensions() override { m_threadBlockDims = { BN, BM }; }
@@ -34,10 +31,11 @@ class Runner : public MatrixMultiplyRunner
         float alpha = 1.0f;
         float beta = 0.0f;
 
-        cublasSgemm(m_handle, CUBLAS_OP_N, CUBLAS_OP_N, N(), M(), K(), &alpha, m_matBDevice, N(), m_matADevice, K(), &beta, m_matCDevice, N());
+        cublasSgemm(m_handle, CUBLAS_OP_N, CUBLAS_OP_N, N(), M(), K(), &alpha, m_matBDevice, N(), m_matADevice, K(),
+                    &beta, m_matCDevice, N());
     }
 
-private:
+  private:
     cublasHandle_t m_handle;
 };
 
@@ -66,9 +64,9 @@ int main(int argc, char *argv[])
     {
         fprintf(stderr, "Failed to create CUBLAS handle!");
         return 1;
-    } 
+    }
 
-    const std::array<uint, 3>& dims = parser.GetDimenions();
+    const std::array<uint, 3> &dims = parser.GetDimenions();
 
     Runner runner(handle);
     runner.Init(dims[0], dims[1], dims[2], 1.0f, 1.0f);
