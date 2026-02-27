@@ -14,10 +14,10 @@ class MatrixMultiplyRunner
     MatrixMultiplyRunner() = default;
     virtual ~MatrixMultiplyRunner() = default;
 
-    void Init(uint32_t M, uint32_t N, uint32_t K, float valA = 1.0f, float valB = 1.0f)
+    void Init(uint m, uint n, uint k, float valA = 1.0f, float valB = 1.0f)
     {
-        m_matADims = { K, M };
-        m_matBDims = { N, K };
+        m_matADims = { k, m };
+        m_matBDims = { n, k };
 
         InitThreadBlockDimensions();
         InitNumberOfThreads();
@@ -76,7 +76,7 @@ class MatrixMultiplyRunner
 
         float maxError = 0.0f;
         VERIFY_RESULT(m_matCHost, m_matCDimsPadded, expectedResult, maxError);
-        fprintf(stdout, "Duration (milliseconds): %0.4f, Peformance (GFLOPS): %0.4f, Max error: %0.4f\n", elapsedTimeMs, flops / 1.e9, maxError);
+        fprintf(stdout, "Duration (milliseconds): %0.4f, Performance (GFLOPS): %0.4f, Max error: %0.4f\n", elapsedTimeMs, flops / 1.e9, maxError);
     }
 
     void Destroy()
@@ -94,6 +94,10 @@ class MatrixMultiplyRunner
     }
 
   protected:
+    uint M() const { return m_matADimsPadded.y; }
+    uint N() const { return m_matBDimsPadded.x; }
+    uint K() const { return m_matADimsPadded.x; }
+
     virtual void InitThreadBlockDimensions() = 0;
     virtual void InitNumberOfThreads() = 0;
     virtual void LaunchKernel() = 0;

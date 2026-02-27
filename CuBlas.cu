@@ -34,11 +34,7 @@ class Runner : public MatrixMultiplyRunner
         float alpha = 1.0f;
         float beta = 0.0f;
 
-        uint m = m_matADimsPadded.y;
-        uint n = m_matBDimsPadded.x;
-        uint k = m_matADimsPadded.x;
-
-        cublasSgemm(m_handle, CUBLAS_OP_N, CUBLAS_OP_N, n, m, k, &alpha, m_matBDevice, n, m_matADevice, k, &beta, m_matCDevice, n);
+        cublasSgemm(m_handle, CUBLAS_OP_N, CUBLAS_OP_N, N(), M(), K(), &alpha, m_matBDevice, N(), m_matADevice, K(), &beta, m_matCDevice, N());
     }
 
 private:
@@ -47,7 +43,12 @@ private:
 
 int main(int argc, char *argv[])
 {
-    ArgsParser parser(argc, argv);
+    ArgsParser parser;
+    if (!parser.Parse(argc, argv))
+    {
+        parser.Usage(argv[0]);
+        return 1;
+    }
 
     int cudaDeviceCount = -1;
     CUDA_CHECK(cudaGetDeviceCount(&cudaDeviceCount));
@@ -70,10 +71,10 @@ int main(int argc, char *argv[])
     const std::array<uint, 3>& dims = parser.GetDimenions();
 
     Runner runner(handle);
-    runner.Init(dims[0], dims[1], dims[2], 1.0f, 2.0f);
+    runner.Init(dims[0], dims[1], dims[2], 1.0f, 1.0f);
     for (int i = 0; i < parser.GetIterations(); ++i)
     {
-        runner.Run(256.0f);
+        runner.Run(parser.GetExpectedResult());
     }
     runner.Destroy();
 

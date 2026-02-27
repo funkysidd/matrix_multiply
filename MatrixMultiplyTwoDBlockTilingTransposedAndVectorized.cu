@@ -2,9 +2,9 @@
 #include "ArgsParser.h"
 
 // Matrix dimensions
-#define M 4096 // rows
-#define N 4096 // cols
-#define K 4096 // common dimension
+// #define M 4096 // rows
+// #define N 4096 // cols
+// #define K 4096 // common dimension
 
 // Matrix A : M x K
 // Matrix B : K x N
@@ -29,12 +29,7 @@ static constexpr uint THREAD_LOADS_PER_ROW_BLOCK_B = BN / CELLS_PER_COLUMN_LOADE
 
 #define OPT_WRITE_MAT_C_VECTORIZED 1 // Optimization enabling vectorized writes to matrix C
 
-__global__ void matMul(float *matA, dim3 dimsA, dim3 blocksA,
-                       ///
-                       float *matB, dim3 dimsB, dim3 blocksB,
-                       ///
-                       float *matC, // c = a x b
-                       dim3 dimsC)
+__global__ void matMul(float *matA, float *matB, float *matC, const uint M, const uint N, const uint K)
 {
     /// @todo: All references to `M`, `N`, `K` need to be relaced with the actual dims of `matA` and `matB`
 
@@ -137,8 +132,7 @@ class Runner : public MatrixMultiplyRunner
 
     void LaunchKernel()
     {
-        matMul<<<m_gridDims, m_threads>>>(m_matADevice, m_matADimsPadded, m_blocksMatA, m_matBDevice, m_matBDimsPadded,
-                                          m_blocksMatC, m_matCDevice, m_matCDimsPadded);
+        matMul<<<m_gridDims, m_threads>>>(m_matADevice, m_matBDevice, m_matCDevice, M(), N(), K());
     }
 };
 
@@ -146,7 +140,12 @@ int main(int argc, char *argv[])
 {
     assert(CELLS_PER_COLUMN_LOADED_BY_THREAD == sizeof(float4) / sizeof(float));
 
-    ArgsParser parser(argc, argv);
+    ArgsParser parser;
+    if (!parser.Parse(argc, argv))
+    {
+        parser.Usage(argv[0]);
+        return 1;
+    }
 
     int cudaDeviceCount = -1;
     CUDA_CHECK(cudaGetDeviceCount(&cudaDeviceCount));
@@ -159,11 +158,13 @@ int main(int argc, char *argv[])
 
     CUDA_CHECK(cudaSetDevice(0));
 
+    const std::array<uint, 3>& dims = parser.GetDimenions();
+
     Runner runner;
-    runner.Init(M, N, K, 1.0f, 2.0f);
+    runner.Init(dims[0], dims[1], dims[2], 1.0f, 1.0f);
     for (int i = 0; i < parser.GetIterations(); ++i)
     {
-        runner.Run(8192.0f);
+        runner.Run(parser.GetExpectedResult());
     }
     runner.Destroy();
 
