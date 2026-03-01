@@ -1,4 +1,4 @@
-# CUDA Testbed
+# Matrix Multiply
 
 A collection of CUDA-based matrix multiplication examples with the sole intent of learning optimization techniques.
 
@@ -10,7 +10,7 @@ mental model of how the algorithms works.
 * A bit more descriptive naming of variables and macros. Again, to help with my mental model.
 * A test runner class to encapsulate common code.
 
-As with Simon's work, the GLOPS computation was borrowed from [2].
+As with Simon's work, the GLOPS computation was borrowed from Wang Zhiyong [2].
 
 The implementation was tested on the following setup,
 
@@ -25,6 +25,14 @@ mkdir -p build && cd $-
 cmake -DCMAKE_BUILD_TYPE=Release ..
 make
 ```
+
+# Results
+
+The several implementations we benchmarked on a RTX 5060 Ti.
+
+Every result is the best of 25 iterations.
+
+<img src="./results/benchmark_results.png" alt="Comparisons across different matrix sizes" width="25%"/>
 
 # References
 
