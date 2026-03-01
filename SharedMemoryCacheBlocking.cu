@@ -1,142 +1,81 @@
-#include "Macros.h"
-
-#include <cuda/cmath>
-#include <cuda_runtime_api.h>
-
-#include <chrono>
-#include <cstdio>
+#include "ArgsParser.h"
+#include "MatrixMultiplyRunner.h"
 
 #define BLOCKSIZE 32
 
-__global__ void matMul(float *matA, dim3 dimsA, dim3 blocksA,
-                       ///
-                       float *matB, dim3 dimsB, dim3 blocksB,
-                       ///
-                       float *matC, // c = a x b
-                       dim3 dimsC)
+__global__ void matMul(float *matA, float *matB, float *matC, const uint M, const uint N, const uint K)
 {
-    __shared__ float blockA[BLOCKSIZE][BLOCKSIZE];
-    __shared__ float blockB[BLOCKSIZE][BLOCKSIZE + 1];
+    __shared__ float sharedBlockA[BLOCKSIZE][BLOCKSIZE];
+    __shared__ float sharedBlockB[BLOCKSIZE][BLOCKSIZE];
 
-    dim3 mappedBlockA = { blockIdx.y % blocksA.x, blockIdx.y / blocksA.x };
-    dim3 mappedBlockB = { blockIdx.x, mappedBlockA.x };
-    dim3 mappedBlockC = { blockIdx.x, blockIdx.y / blocksB.y };
+    float threadResult = { 0.0f };
 
-    dim3 threadOffsetA = { mappedBlockA.x * BLOCKSIZE + threadIdx.x, mappedBlockA.y * BLOCKSIZE + threadIdx.y };
-    dim3 threadOffsetB = { mappedBlockB.x * BLOCKSIZE + threadIdx.x, mappedBlockB.y * BLOCKSIZE + threadIdx.y };
-    dim3 threadOffsetC = { mappedBlockC.x * BLOCKSIZE + threadIdx.x, mappedBlockC.y * BLOCKSIZE + threadIdx.y };
+    dim2 blockCellOffsetMatA = { 0, blockIdx.y * BLOCKSIZE };
+    dim2 blockCellOffsetMatB = { blockIdx.x * BLOCKSIZE, 0 };
+    dim2 blockCellOffsetMatC = { blockIdx.x * BLOCKSIZE, blockIdx.y * BLOCKSIZE };
 
-    blockA[threadIdx.y][threadIdx.x] = matA[threadOffsetA.y * dimsA.x + threadOffsetA.x];
-    blockB[threadIdx.y][threadIdx.x] = matB[threadOffsetB.y * dimsB.x + threadOffsetB.x];
-
-    __syncthreads();
-
-    float result = 0.0f;
-    for (int idx = 0; idx < BLOCKSIZE; ++idx)
+    for (int blockIt = 0; blockIt < K; blockIt += BLOCKSIZE)
     {
-        result += blockA[threadIdx.y][idx] * blockB[idx][threadIdx.x];
+        dim2 cellIdxMatA = { blockCellOffsetMatA.x + threadIdx.x, blockCellOffsetMatA.y + threadIdx.y };
+        dim2 cellIdxMatB = { blockCellOffsetMatB.x + threadIdx.x, blockCellOffsetMatB.y + threadIdx.y };
+
+        sharedBlockA[threadIdx.y][threadIdx.x] = matA[cellIdxMatA.y * K + cellIdxMatA.x];
+        sharedBlockB[threadIdx.y][threadIdx.x] = matB[cellIdxMatB.y * N + cellIdxMatB.x];
+
+        __syncthreads();
+
+        for (int idx = 0; idx < BLOCKSIZE; ++idx)
+        {
+            threadResult += sharedBlockA[threadIdx.y][idx] * sharedBlockB[idx][threadIdx.x];
+        }
+
+        __syncthreads();
+
+        blockCellOffsetMatA.x += BLOCKSIZE;
+        blockCellOffsetMatB.y += BLOCKSIZE;
     }
 
-    atomicAdd(&matC[threadOffsetC.y * dimsC.x + threadOffsetC.x], result);
+    dim2 cellIdxMatC = { blockCellOffsetMatC.x + threadIdx.x, blockCellOffsetMatC.y + threadIdx.y };
+    matC[cellIdxMatC.y * N + cellIdxMatC.x] = threadResult;
 }
 
-int main()
+class Runner : public MatrixMultiplyRunner
 {
-    int cudaDeviceCount = -1;
-    CUDA_CHECK(cudaGetDeviceCount(&cudaDeviceCount));
+  public:
+    Runner() : MatrixMultiplyRunner() {}
 
-    if (cudaDeviceCount < 1)
+  protected:
+    void InitThreadBlockDimensions() override { m_threadBlockDims = { BLOCKSIZE, BLOCKSIZE }; }
+
+    void InitNumberOfThreads() override { m_threads = { BLOCKSIZE, BLOCKSIZE }; }
+
+    void LaunchKernel()
     {
-        fprintf(stderr, "No CUDA device found, exiting!\n");
-        return 1;
+        matMul<<<m_gridDims, m_threads>>>(m_matADevice, m_matBDevice, m_matCDevice, M(), N(), K());
     }
+};
 
-    CUDA_CHECK(cudaSetDevice(0));
+int main(int argc, char *argv[])
+{
+    COMMON_APP_SETUP()
 
-    constexpr dim3 dimsMatA{ 4096, 4096 }; // x (cols), y (rows)
-    constexpr dim3 dimsMatB{ 4096, 4096 }; // x (cols), y (rows)
+    const std::array<uint, 3> &dims = parser.GetDimenions();
 
-    assert(dimsMatA.x == dimsMatB.y);
-
-    // Compute number of 32x32 blocks in each of the matrices
-    constexpr dim3 blockDims{ BLOCKSIZE, BLOCKSIZE };
-    constexpr dim3 blocksMatA{ cuda::ceil_div(dimsMatA.x, blockDims.x), cuda::ceil_div(dimsMatA.y, blockDims.y) };
-    constexpr dim3 blocksMatB{ cuda::ceil_div(dimsMatB.x, blockDims.x), cuda::ceil_div(dimsMatB.y, blockDims.y) };
-
-    assert(blocksMatA.x == blocksMatB.y);
-
-    constexpr dim3 blocksMatC{ blocksMatB.x, blocksMatA.y };
-
-    constexpr dim3 dimsMatAMod = MATRIX_DIMS(blocksMatA, blockDims);
-    constexpr dim3 dimsMatBMod = MATRIX_DIMS(blocksMatB, blockDims);
-    constexpr dim3 dimsMatCMod = MATRIX_DIMS(blocksMatC, blockDims);
-
-    float *matADevice = nullptr;
-    float *matBDevice = nullptr;
-    float *matCDevice = nullptr;
-
-    float *matAHost = nullptr;
-    float *matBHost = nullptr;
-    float *matCHost = nullptr;
-
-    CUDA_CHECK(cudaMallocHost(&matAHost, GET_SIZE(dimsMatAMod) * sizeof(float)));
-    CUDA_CHECK(cudaMallocHost(&matBHost, GET_SIZE(dimsMatBMod) * sizeof(float)));
-    CUDA_CHECK(cudaMallocHost(&matCHost, GET_SIZE(dimsMatCMod) * sizeof(float)));
-
-    ASSIGN_MATRIX(matAHost, dimsMatAMod, 1.0f);
-    ASSIGN_MATRIX(matBHost, dimsMatBMod, 1.0f);
-
-    CUDA_CHECK(cudaMalloc(&matADevice, GET_SIZE(dimsMatAMod) * sizeof(float)));
-    CUDA_CHECK(cudaMalloc(&matBDevice, GET_SIZE(dimsMatBMod) * sizeof(float)));
-    CUDA_CHECK(cudaMalloc(&matCDevice, GET_SIZE(dimsMatCMod) * sizeof(float)));
-
-    CUDA_CHECK(cudaMemcpy(matADevice, matAHost, GET_SIZE(dimsMatAMod) * sizeof(float),
-                          cudaMemcpyKind::cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(matBDevice, matBHost, GET_SIZE(dimsMatBMod) * sizeof(float),
-                          cudaMemcpyKind::cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemset(matCDevice, 0, GET_SIZE(dimsMatCMod) * sizeof(float)));
-
-    constexpr dim3 gridDims{ blocksMatC.x, blocksMatC.y * blocksMatB.y };
-
-    cudaEvent_t startEvent;
-    cudaEvent_t endEvent;
-
-    CUDA_CHECK(cudaEventCreate(&startEvent));
-    CUDA_CHECK(cudaEventCreate(&endEvent));
-
-    CUDA_CHECK(cudaEventRecord(startEvent, 0));
-    matMul<<<gridDims, blockDims>>>(matADevice, dimsMatAMod, blocksMatA, matBDevice, dimsMatBMod, blocksMatC,
-                                    matCDevice, dimsMatCMod);
-    CUDA_CHECK(cudaEventRecord(endEvent, 0));
-    CUDA_CHECK(cudaEventSynchronize(endEvent));
-
-    float elapsedTimeMs = 0.0f;
-    CUDA_CHECK(cudaEventElapsedTime(&elapsedTimeMs, startEvent, endEvent));
-    fprintf(stdout, "Duration: %0.4f (milliseconds)\n", elapsedTimeMs);
-
-    constexpr float totalOps = 2.0f * dimsMatCMod.x * dimsMatCMod.y * dimsMatAMod.x;
-    float flops = totalOps / (elapsedTimeMs / 1000.f);
-    fprintf(stdout, "Performance (GFLOPS): %0.4f\n", flops / 1.e9); // A giga flop is 10^9 flops
-
-    CUDA_CHECK(cudaDeviceSynchronize());
-
-    CUDA_CHECK(cudaEventDestroy(endEvent));
-    CUDA_CHECK(cudaEventDestroy(startEvent));
-
-    CUDA_CHECK(cudaMemcpy(matCHost, matCDevice, GET_SIZE(dimsMatCMod) * sizeof(float),
-                          cudaMemcpyKind::cudaMemcpyDeviceToHost));
-
+    float perfGFlops = 0.0f;
     float maxError = 0.0f;
-    VERIFY_RESULT(matCHost, dimsMatCMod, 4096.0f, maxError);
-    fprintf(stdout, "Max error: %0.4f\n", maxError);
 
-    CUDA_CHECK(cudaFree(matCDevice));
-    CUDA_CHECK(cudaFree(matBDevice));
-    CUDA_CHECK(cudaFree(matADevice));
+    Runner runner;
+    runner.Init(dims[0], dims[1], dims[2], 1.0f, 1.0f);
+    for (int i = 0; i < parser.GetIterations(); ++i)
+    {
+        runner.Run(parser.GetExpectedResult());
+        perfGFlops = std::max(perfGFlops, runner.GetPerfInGigaFlops());
+        maxError = std::max(maxError, runner.GetMaxError());
+        fprintf(stdout, "Iteration %0.3d, performance (GLOPS): %0.4f\n", i, runner.GetPerfInGigaFlops());
+    }
+    runner.Destroy();
 
-    CUDA_CHECK(cudaFreeHost(matCHost));
-    CUDA_CHECK(cudaFreeHost(matBHost));
-    CUDA_CHECK(cudaFreeHost(matAHost));
+    fprintf(stdout, "Best performance (GFLOPS): %0.4f, Max error: %0.4f\n", perfGFlops, maxError);
 
     return 0;
 }
