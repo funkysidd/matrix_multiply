@@ -1,16 +1,5 @@
-#include "DataTypes.h"
-#include "Macros.h"
-
-#include <cuda/cmath>
-#include <cuda_runtime_api.h>
-
-#include <chrono>
-#include <cstdio>
-
-// Matrix dimensions
-#define M 4096 // rows
-#define N 4096 // cols
-#define K 4096 // common dimension
+#include "ArgsParser.h"
+#include "MatrixMultiplyRunner.h"
 
 // Matrix A : M x K
 // Matrix B : K x N
@@ -24,15 +13,8 @@
 // Block size in A : BM x BK
 // Block size in B : BK x BN
 
-__global__ void matMul(float *matA, dim3 dimsA, dim3 blocksA,
-                       ///
-                       float *matB, dim3 dimsB, dim3 blocksB,
-                       ///
-                       float *matC, // c = a x b
-                       dim3 dimsC)
+__global__ void matMul(float *matA, float *matB, float *matC, const uint M, const uint N, const uint K)
 {
-    /// @todo: All references to `M`, `N`, `K` need to be relaced with the actual dims of `matA` and `matB`
-
     __shared__ float sharedBlockA[BM][BK];
     __shared__ float sharedBlockB[BK][BN];
 
@@ -91,103 +73,43 @@ __global__ void matMul(float *matA, dim3 dimsA, dim3 blocksA,
     }
 }
 
-int main()
+class Runner : public MatrixMultiplyRunner
 {
-    int cudaDeviceCount = -1;
-    CUDA_CHECK(cudaGetDeviceCount(&cudaDeviceCount));
+  public:
+    Runner() : MatrixMultiplyRunner() {}
 
-    if (cudaDeviceCount < 1)
+  protected:
+    void InitThreadBlockDimensions() override { m_threadBlockDims = { BN, BM }; }
+
+    void InitNumberOfThreads() override { m_threads = { (m_threadBlockDims.x * m_threadBlockDims.y) / TM }; }
+
+    void LaunchKernel()
     {
-        fprintf(stderr, "No CUDA device found, exiting!\n");
-        return 1;
+        matMul<<<m_gridDims, m_threads>>>(m_matADevice, m_matBDevice, m_matCDevice, M(), N(), K());
     }
+};
 
-    CUDA_CHECK(cudaSetDevice(0));
+int main(int argc, char *argv[])
+{
+    COMMON_APP_SETUP()
 
-    constexpr dim3 dimsMatA{ K, M }; // x (cols), y (rows)
-    constexpr dim3 dimsMatB{ N, K }; // x (cols), y (rows)
+    const std::array<uint, 3> &dims = parser.GetDimenions();
 
-    assert(dimsMatA.x == dimsMatB.y);
-
-    constexpr dim3 blockDims{ BN, BM };
-    constexpr dim3 threadDims{ (blockDims.x * blockDims.y) / TM };
-    constexpr dim3 blocksMatA{ cuda::ceil_div(dimsMatA.x, blockDims.x), cuda::ceil_div(dimsMatA.y, blockDims.y) };
-    constexpr dim3 blocksMatB{ cuda::ceil_div(dimsMatB.x, blockDims.x), cuda::ceil_div(dimsMatB.y, blockDims.y) };
-
-    assert(blocksMatA.x == blocksMatB.y);
-
-    constexpr dim3 blocksMatC{ blocksMatB.x, blocksMatA.y };
-
-    constexpr dim3 dimsMatAMod = MATRIX_DIMS(blocksMatA, blockDims);
-    constexpr dim3 dimsMatBMod = MATRIX_DIMS(blocksMatB, blockDims);
-    constexpr dim3 dimsMatCMod = MATRIX_DIMS(blocksMatC, blockDims);
-
-    float *matADevice = nullptr;
-    float *matBDevice = nullptr;
-    float *matCDevice = nullptr;
-
-    float *matAHost = nullptr;
-    float *matBHost = nullptr;
-    float *matCHost = nullptr;
-
-    CUDA_CHECK(cudaMallocHost(&matAHost, GET_SIZE(dimsMatAMod) * sizeof(float)));
-    CUDA_CHECK(cudaMallocHost(&matBHost, GET_SIZE(dimsMatBMod) * sizeof(float)));
-    CUDA_CHECK(cudaMallocHost(&matCHost, GET_SIZE(dimsMatCMod) * sizeof(float)));
-
-    ASSIGN_MATRIX(matAHost, dimsMatAMod, 1.0f);
-    ASSIGN_MATRIX(matBHost, dimsMatBMod, 1.0f);
-
-    CUDA_CHECK(cudaMalloc(&matADevice, GET_SIZE(dimsMatAMod) * sizeof(float)));
-    CUDA_CHECK(cudaMalloc(&matBDevice, GET_SIZE(dimsMatBMod) * sizeof(float)));
-    CUDA_CHECK(cudaMalloc(&matCDevice, GET_SIZE(dimsMatCMod) * sizeof(float)));
-
-    CUDA_CHECK(cudaMemcpy(matADevice, matAHost, GET_SIZE(dimsMatAMod) * sizeof(float),
-                          cudaMemcpyKind::cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(matBDevice, matBHost, GET_SIZE(dimsMatBMod) * sizeof(float),
-                          cudaMemcpyKind::cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemset(matCDevice, 0, GET_SIZE(dimsMatCMod) * sizeof(float)));
-
-    constexpr dim3 gridDims{ blocksMatC.x, blocksMatC.y };
-
-    cudaEvent_t startEvent;
-    cudaEvent_t endEvent;
-
-    CUDA_CHECK(cudaEventCreate(&startEvent));
-    CUDA_CHECK(cudaEventCreate(&endEvent));
-
-    CUDA_CHECK(cudaEventRecord(startEvent, 0));
-    matMul<<<gridDims, threadDims>>>(matADevice, dimsMatAMod, blocksMatA, matBDevice, dimsMatBMod, blocksMatC,
-                                     matCDevice, dimsMatCMod);
-    CUDA_CHECK(cudaEventRecord(endEvent, 0));
-    CUDA_CHECK(cudaEventSynchronize(endEvent));
-
-    float elapsedTimeMs = 0.0f;
-    CUDA_CHECK(cudaEventElapsedTime(&elapsedTimeMs, startEvent, endEvent));
-    fprintf(stdout, "Duration: %0.4f (milliseconds)\n", elapsedTimeMs);
-
-    constexpr float totalOps = 2.0f * dimsMatCMod.x * dimsMatCMod.y * dimsMatAMod.x;
-    float flops = totalOps / (elapsedTimeMs / 1000.f);
-    fprintf(stdout, "Performance (GFLOPS): %0.4f\n", flops / 1.e9); // A giga flop is 10^9 flops
-
-    CUDA_CHECK(cudaDeviceSynchronize());
-
-    CUDA_CHECK(cudaEventDestroy(endEvent));
-    CUDA_CHECK(cudaEventDestroy(startEvent));
-
-    CUDA_CHECK(cudaMemcpy(matCHost, matCDevice, GET_SIZE(dimsMatCMod) * sizeof(float),
-                          cudaMemcpyKind::cudaMemcpyDeviceToHost));
-
+    float perfGFlops = 0.0f;
     float maxError = 0.0f;
-    VERIFY_RESULT(matCHost, dimsMatCMod, 4096.0f, maxError);
-    fprintf(stdout, "Max error: %0.4f\n", maxError);
 
-    CUDA_CHECK(cudaFree(matCDevice));
-    CUDA_CHECK(cudaFree(matBDevice));
-    CUDA_CHECK(cudaFree(matADevice));
+    Runner runner;
+    runner.Init(dims[0], dims[1], dims[2], 1.0f, 1.0f);
+    for (int i = 0; i < parser.GetIterations(); ++i)
+    {
+        runner.Run(parser.GetExpectedResult());
+        perfGFlops = std::max(perfGFlops, runner.GetPerfInGigaFlops());
+        maxError = std::max(maxError, runner.GetMaxError());
+        fprintf(stdout, "Iteration %0.3d, performance (GLOPS): %0.4f\n", i, runner.GetPerfInGigaFlops());
+    }
+    runner.Destroy();
 
-    CUDA_CHECK(cudaFreeHost(matCHost));
-    CUDA_CHECK(cudaFreeHost(matBHost));
-    CUDA_CHECK(cudaFreeHost(matAHost));
+    fprintf(stdout, "Best performance (GFLOPS): %0.4f, Max error: %0.4f\n", perfGFlops, maxError);
 
     return 0;
 }
