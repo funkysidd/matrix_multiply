@@ -62,11 +62,12 @@ class MatrixMultiplyRunner
         CUDA_CHECK(cudaEventRecord(m_endEvent, 0));
         CUDA_CHECK(cudaEventSynchronize(m_endEvent));
 
-        float elapsedTimeMs = 0.0f;
-        CUDA_CHECK(cudaEventElapsedTime(&elapsedTimeMs, m_startEvent, m_endEvent));
+        m_elapsedTimeMs = 0.0f;
+        CUDA_CHECK(cudaEventElapsedTime(&m_elapsedTimeMs, m_startEvent, m_endEvent));
 
         float totalOps = 2.0f * m_matCDimsPadded.x * m_matCDimsPadded.y * m_matADimsPadded.x;
-        float flops = totalOps / (elapsedTimeMs / 1000.f); // A giga flop is 10^9 flops
+        float flops = totalOps / (m_elapsedTimeMs / 1000.f);
+        m_perGFlops = flops / 1.e9; // A giga flop is 10^9 flops
 
         CUDA_CHECK(cudaDeviceSynchronize());
 
@@ -74,10 +75,8 @@ class MatrixMultiplyRunner
                               cudaMemcpyKind::cudaMemcpyDeviceToHost));
         CUDA_CHECK(cudaMemset(m_matCDevice, 0, GET_SIZE(m_matCDimsPadded) * sizeof(float)));
 
-        float maxError = 0.0f;
-        VERIFY_RESULT(m_matCHost, m_matCDimsPadded, expectedResult, maxError);
-        fprintf(stdout, "Duration (milliseconds): %0.4f, Performance (GFLOPS): %0.4f, Max error: %0.4f\n",
-                elapsedTimeMs, flops / 1.e9, maxError);
+        m_maxError = 0.0f;
+        VERIFY_RESULT(m_matCHost, m_matCDimsPadded, expectedResult, m_maxError);
     }
 
     void Destroy()
@@ -93,6 +92,10 @@ class MatrixMultiplyRunner
         CUDA_CHECK(cudaFreeHost(m_matBHost));
         CUDA_CHECK(cudaFreeHost(m_matAHost));
     }
+
+    float GetElapsedTimeInMilliseconds() const { return m_elapsedTimeMs; }
+    float GetPerfInGigaFlops() const { return m_perGFlops; }
+    float GetMaxError() const { return m_maxError; }
 
   protected:
     uint M() const { return m_matADimsPadded.y; }
@@ -129,4 +132,9 @@ class MatrixMultiplyRunner
     dim3 m_matADimsPadded; // Padded matrix A dimensions
     dim3 m_matBDimsPadded; // Padded matrix B dimensions
     dim3 m_matCDimsPadded; // Padded matrix C dimensions
+
+  private:
+    float m_elapsedTimeMs{ 0.0f };
+    float m_maxError{ 0.0f };
+    float m_perGFlops{ 0.0f };
 };
