@@ -1,5 +1,5 @@
 """
-Formats C++/CUDA files in the current directory using clang-format.
+Formats C++/CUDA files using clang-format.
 """
 
 import subprocess
