@@ -40,4 +40,23 @@
     }                                                                               \
 } while (0)
 
+#define COMMON_APP_SETUP()                                   \
+    ArgsParser parser;                                       \
+    if (!parser.Parse(argc, argv))                           \
+    {                                                        \
+        parser.Usage(argv[0]);                               \
+        return 1;                                            \
+    }                                                        \
+                                                             \
+    int cudaDeviceCount = -1;                                \
+    CUDA_CHECK(cudaGetDeviceCount(&cudaDeviceCount));        \
+                                                             \
+    if (cudaDeviceCount < 1)                                 \
+    {                                                        \
+        fprintf(stderr, "No CUDA device found, exiting!\n"); \
+        return 1;                                            \
+    }                                                        \
+                                                             \
+    CUDA_CHECK(cudaSetDevice(0));
+
 // clang-format on

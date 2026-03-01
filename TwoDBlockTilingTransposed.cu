@@ -1,9 +1,8 @@
+#include "ArgsParser.h"
 #include "MatrixMultiplyRunner.h"
 
-// Matrix dimensions
-#define M 4096 // rows
-#define N 4096 // cols
-#define K 4096 // common dimension
+#include <thread>
+#include <chrono>
 
 // Matrix A : M x K
 // Matrix B : K x N
@@ -21,15 +20,8 @@ static constexpr int NUM_THREADS_PER_BLOCK = THREADS_BLOCKS_IN_Y * THREADS_BLOCK
 // Block size in A : BM x BK
 // Block size in B : BK x BN
 
-__global__ void matMul(float *matA, dim3 dimsA, dim3 blocksA,
-                       ///
-                       float *matB, dim3 dimsB, dim3 blocksB,
-                       ///
-                       float *matC, // c = a x b
-                       dim3 dimsC)
+__global__ void matMul(float *matA, float *matB, float *matC, const uint M, const uint N, const uint K)
 {
-    /// @todo: All references to `M`, `N`, `K` need to be relaced with the actual dims of `matA` and `matB`
-
     __shared__ float sharedBlockA_T[BK][BM]; // Transposed, i.e., as opposed to BM x BK
     __shared__ float sharedBlockB[BK][BN];
 
@@ -116,28 +108,31 @@ class Runner : public MatrixMultiplyRunner
 
     void LaunchKernel()
     {
-        matMul<<<m_gridDims, m_threads>>>(m_matADevice, m_matADimsPadded, m_blocksMatA, m_matBDevice, m_matBDimsPadded,
-                                          m_blocksMatC, m_matCDevice, m_matCDimsPadded);
+        matMul<<<m_gridDims, m_threads>>>(m_matADevice, m_matBDevice, m_matCDevice, M(), N(), K());
     }
 };
 
-int main()
+int main(int argc, char *argv[])
 {
-    int cudaDeviceCount = -1;
-    CUDA_CHECK(cudaGetDeviceCount(&cudaDeviceCount));
+    COMMON_APP_SETUP()
 
-    if (cudaDeviceCount < 1)
-    {
-        fprintf(stderr, "No CUDA device found, exiting!\n");
-        return 1;
-    }
+    const std::array<uint, 3> &dims = parser.GetDimenions();
 
-    CUDA_CHECK(cudaSetDevice(0));
+    float perfGFlops = 0.0f;
+    float maxError = 0.0f;
 
     Runner runner;
-    runner.Init(M, N, K);
-    runner.Run();
+    runner.Init(dims[0], dims[1], dims[2], 1.0f, 1.0f);
+    for (int i = 0; i < parser.GetIterations(); ++i)
+    {
+        runner.Run(parser.GetExpectedResult());
+        perfGFlops = std::max(perfGFlops, runner.GetPerfInGigaFlops());
+        maxError = std::max(maxError, runner.GetMaxError());
+        fprintf(stdout, "Iteration %0.3d, performance (GLOPS): %0.4f\n", i, runner.GetPerfInGigaFlops());
+    }
     runner.Destroy();
+
+    fprintf(stdout, "Best performance (GFLOPS): %0.4f, Max error: %0.4f\n", perfGFlops, maxError);
 
     return 0;
 }

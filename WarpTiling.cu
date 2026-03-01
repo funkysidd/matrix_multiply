@@ -192,33 +192,25 @@ int main(int argc, char *argv[])
     static_assert(CELLS_PER_COLUMN_LOADED_BY_THREAD == sizeof(float4) / sizeof(float));
     static_assert(THREAD_TILES_PER_THREAD_Y != 0);
 
-    ArgsParser parser;
-    if (!parser.Parse(argc, argv))
-    {
-        parser.Usage(argv[0]);
-        return 1;
-    }
-
-    int cudaDeviceCount = -1;
-    CUDA_CHECK(cudaGetDeviceCount(&cudaDeviceCount));
-
-    if (cudaDeviceCount < 1)
-    {
-        fprintf(stderr, "No CUDA device found, exiting!\n");
-        return 1;
-    }
-
-    CUDA_CHECK(cudaSetDevice(0));
+    COMMON_APP_SETUP()
 
     const std::array<uint, 3> &dims = parser.GetDimenions();
+
+    float perfGFlops = 0.0f;
+    float maxError = 0.0f;
 
     Runner runner;
     runner.Init(dims[0], dims[1], dims[2], 1.0f, 1.0f);
     for (int i = 0; i < parser.GetIterations(); ++i)
     {
         runner.Run(parser.GetExpectedResult());
+        perfGFlops = std::max(perfGFlops, runner.GetPerfInGigaFlops());
+        maxError = std::max(maxError, runner.GetMaxError());
+        fprintf(stdout, "Iteration %0.3d, performance (GLOPS): %0.4f\n", i, runner.GetPerfInGigaFlops());
     }
     runner.Destroy();
+
+    fprintf(stdout, "Best performance (GFLOPS): %0.4f, Max error: %0.4f\n", perfGFlops, maxError);
 
     return 0;
 }
