@@ -1,8 +1,8 @@
 #include "ArgsParser.h"
 #include "MatrixMultiplyRunner.h"
 
-#include <thread>
 #include <chrono>
+#include <thread>
 
 // Matrix A : M x K
 // Matrix B : K x N

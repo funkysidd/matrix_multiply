@@ -1,8 +1,8 @@
 #include "ArgsParser.h"
 #include "MatrixMultiplyRunner.h"
 
-#include <thread>
 #include <chrono>
+#include <thread>
 
 // Matrix A : M x K
 // Matrix B : K x N
@@ -106,10 +106,7 @@ class Runner : public MatrixMultiplyRunner
 
     void InitNumberOfThreads() override { m_threads = { (m_threadBlockDims.x * m_threadBlockDims.y) / (TM * TN) }; }
 
-    void LaunchKernel()
-    {
-        matMul<<<m_gridDims, m_threads>>>(m_matADevice, m_matBDevice, m_matCDevice, M(), N(), K());
-    }
+    void LaunchKernel() { matMul<<<m_gridDims, m_threads>>>(m_matADevice, m_matBDevice, m_matCDevice, M(), N(), K()); }
 };
 
 int main(int argc, char *argv[])

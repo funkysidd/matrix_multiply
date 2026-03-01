@@ -83,10 +83,7 @@ class Runner : public MatrixMultiplyRunner
 
     void InitNumberOfThreads() override { m_threads = { (m_threadBlockDims.x * m_threadBlockDims.y) / TM }; }
 
-    void LaunchKernel()
-    {
-        matMul<<<m_gridDims, m_threads>>>(m_matADevice, m_matBDevice, m_matCDevice, M(), N(), K());
-    }
+    void LaunchKernel() { matMul<<<m_gridDims, m_threads>>>(m_matADevice, m_matBDevice, m_matCDevice, M(), N(), K()); }
 };
 
 int main(int argc, char *argv[])
