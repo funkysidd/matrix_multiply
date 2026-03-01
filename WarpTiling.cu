@@ -38,7 +38,7 @@ static constexpr uint THREAD_LOADS_PER_ROW_BLOCK_B = BN / CELLS_PER_COLUMN_LOADE
 static constexpr uint32_t THREAD_ROW_STRIDE_A = THREADS_PER_BLOCK / THREAD_LOADS_PER_ROW_BLOCK_A;
 static constexpr uint32_t THREAD_ROW_STRIDE_B = THREADS_PER_BLOCK / THREAD_LOADS_PER_ROW_BLOCK_B;
 
-#define OPT_WRITE_MAT_C_VECTORIZED 1 // Optimization enabling vectorized writes to matrix C
+#define OPT_WRITE_MAT_C_VECTORIZED 0 // Optimization enabling vectorized writes to matrix C
 
 __global__ void matMul(float *matA, float *matB, float *matC, const uint M, const uint N, const uint K)
 {
@@ -46,8 +46,8 @@ __global__ void matMul(float *matA, float *matB, float *matC, const uint M, cons
     __shared__ float sharedBlockB[BK][BN];
 
     float threadData[WARP_SUB_TILE_DIMENSION_Y][WARP_SUB_TILE_DIMENSION_X] = { 0.0f };
-    float rowA[TM];
-    float colB[TN];
+    float rowA[WARP_SUB_TILE_DIMENSION_Y];
+    float colB[WARP_SUB_TILE_DIMENSION_X];
 
     dim2 blockCellOffsetMatA = { 0, blockIdx.y * BM };
     dim2 blockCellOffsetMatB = { blockIdx.x * BN, 0 };
@@ -64,7 +64,7 @@ __global__ void matMul(float *matA, float *matB, float *matC, const uint M, cons
 
     dim2 warpSubtileId = { threadIdWithinWarp % WARP_SUB_TILES_IN_X, threadIdWithinWarp / WARP_SUB_TILES_IN_X };
     dim2 warpSubtileOffSetInSharedBlock = { (warpSubtileId.x * WARP_SUB_TILE_DIMENSION_X) + warpOffsetInSharedBlock.x,
-                                           (warpSubtileId.y * WARP_SUB_TILE_DIMENSION_Y) + warpOffsetInSharedBlock.y };
+                                            (warpSubtileId.y * WARP_SUB_TILE_DIMENSION_Y) + warpOffsetInSharedBlock.y };
 
     for (uint blockIt = 0; blockIt < K; blockIt += BK)
     {
@@ -85,41 +85,38 @@ __global__ void matMul(float *matA, float *matB, float *matC, const uint M, cons
         {
             // Load `CELLS_PER_COLUMN_LOADED_BY_THREAD` (i.e., float4) cells at baseCellIdxBlockB
             dim2 cellIdxMatB = { blockCellOffsetMatB.x + baseCellIdxBlockB.x,
-                                 blockCellOffsetMatB.y + baseCellIdxBlockB.y + row};
+                                 blockCellOffsetMatB.y + baseCellIdxBlockB.y + row };
             reinterpret_cast<float4 *>(&sharedBlockB[baseCellIdxBlockB.y + row][baseCellIdxBlockB.x])[0] =
                 reinterpret_cast<float4 *>(&matB[cellIdxMatB.y * N + cellIdxMatB.x])[0];
         }
 
         __syncthreads();
 
-        // Algorithm:
-        // Step 1: Determine which warp tile does a thread belong to.
-        // Step 2: Within a warp, which thread tiles does the thread map to.
-        // Step 3: Iterate over the thread tiles, compute result, and store in `threadData`.
-
-        for (uint tItY = 0; tItY < THREAD_TILES_PER_THREAD_Y; ++tItY)
+        for (uint i = 0; i < BK; ++i)
         {
-            for (uint tItX = 0; tItX < THREAD_TILES_PER_THREAD_X; ++tItX)
+            for (uint row = 0; row < WARP_SUB_TILE_DIMENSION_Y; ++row)
             {
-                // We are now within a thread tile witihn a warp sub-tile
-                dim2 threadTileOffset = { (tItX * TN), (tItY * TM) };
-                for (uint i = 0; i < BK; ++i)
-                {
-                    for (uint row = 0; row < TM; ++row)
-                    {
-                        rowA[row] = sharedBlockA_T[i][warpSubtileOffSetInSharedBlock.y + threadTileOffset.y + row];
-                    }
+                rowA[row] = sharedBlockA_T[i][warpSubtileOffSetInSharedBlock.y + row];
+            }
 
-                    for (uint col = 0; col < TN; ++col)
-                    {
-                        colB[col] = sharedBlockB[i][warpSubtileOffSetInSharedBlock.x + threadTileOffset.x + col];
-                    }
+            for (uint col = 0; col < WARP_SUB_TILE_DIMENSION_X; ++col)
+            {
+                colB[col] = sharedBlockB[i][warpSubtileOffSetInSharedBlock.x + col];
+            }
+
+            for (uint tItY = 0; tItY < THREAD_TILES_PER_THREAD_Y; ++tItY)
+            {
+                for (uint tItX = 0; tItX < THREAD_TILES_PER_THREAD_X; ++tItX)
+                {
+                    // We are now within a thread tile witihn a warp sub-tile
+                    dim2 threadTileOffset = { (tItX * TN), (tItY * TM) };
 
                     for (uint row = 0; row < TM; ++row)
                     {
                         for (uint col = 0; col < TN; ++col)
                         {
-                            threadData[threadTileOffset.y + row][threadTileOffset.x + col] += rowA[row] * colB[col];
+                            dim2 dst = { threadTileOffset.x + col, threadTileOffset.y + row };
+                            threadData[dst.y][dst.x] += rowA[dst.y] * colB[dst.x];
                         }
                     }
                 }
@@ -168,7 +165,8 @@ __global__ void matMul(float *matA, float *matB, float *matC, const uint M, cons
                 {
                     dim2 cellIdxMatC = { blockCellOffsetMatC.x + threadTileOffset.x + col,
                                          blockCellOffsetMatC.y + threadTileOffset.y + row };
-                    matC[cellIdxMatC.y * N + cellIdxMatC.x] = threadData[threadTileOffset.y + row][threadTileOffset.x + col];
+                    matC[cellIdxMatC.y * N + cellIdxMatC.x] =
+                        threadData[threadTileOffset.y + row][threadTileOffset.x + col];
                 }
             }
         }
