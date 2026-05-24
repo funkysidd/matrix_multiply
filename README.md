@@ -28,7 +28,7 @@ make
 
 # Results
 
-The several implementations we benchmarked on a RTX 5060 Ti.
+The implementations were benchmarked on a RTX 5060 Ti.
 
 Every result is the best of 25 iterations.
 
