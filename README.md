@@ -14,7 +14,7 @@ As with Simon's work, the GLOPS computation was borrowed from Wang Zhiyong [2].
 
 The implementation was tested on the following setup,
 
-* RTX 5060 T1
+* RTX 5060 Ti
 * CUDA 12.9
 * Linux (Debian 11)
 
