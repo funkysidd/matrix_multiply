@@ -39,9 +39,11 @@ __global__ void matMul(float *matA, float *matB, float *matC, const uint M, cons
 
         // Both variants below result in similar performance
 #if 0
+        // For a given cell in B, this loop simply computes all the cells in C that the thread is responsible for.
         for (int idx = 0; idx < TM; ++idx)
         {
             dim2 cellIdxBlockC = { cellIdxBlockB.x, cellIdxBlockB.y * BK + idx };
+            // For a given cell in C, this is simply the standard loop for going over the common dimension BK.
             for (int in = 0; in < BK; ++in)
             {
                 threadData[idx] += sharedBlockA[cellIdxBlockC.y][in] * sharedBlockB[in][cellIdxBlockC.x];
